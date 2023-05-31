@@ -30,13 +30,24 @@ string readFileIntoString4(const string& path) {
     return res;
 }
 
-int main()
+/*
+int main(int argc, char * argv[])
 {
     string filename("input.txt");
     string file_contents;
 
-    file_contents = readFileIntoString4(filename);
+  	if (argc != 3) {
+		cout << argv[0] << " pattern.json " << "file" << endl;
+		return 0;
+	}
+		
+	cout << "file 1" << endl; 
+    file_contents = readFileIntoString4(argv[1]);
+    cout << file_contents << endl;
+	cout << "file 2" << endl;
+    file_contents = readFileIntoString4(argv[2]);
     cout << file_contents << endl;
 
     exit(EXIT_SUCCESS);
 }
+*/
