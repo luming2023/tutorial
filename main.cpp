@@ -11,21 +11,25 @@
 #include "FireDog/json/json-schema/json-schema.hpp"
 
 #include "FireDog/rule/rule.h"
+#include "file2str.cpp"
 
 using namespace std;
 using namespace firedog;
 
 using nlohmann::json;
 using nlohmann::json_schema::json_validator;
+string virus;
+string viruspatternrules;
 
 void testOutPut() {
     string hexstr = "hello";
     cout << StringUtil::textToHexText(hexstr) << endl;
 }
-
 void testMatcher() {
 
+    const char * featureLibraryJson = const_cast<char *>(viruspatternrules.c_str());
     //test featureLibrary
+#if 0
     const char* featureLibraryJson = R"(
         {
             "version":"1.1.0",
@@ -123,12 +127,13 @@ void testMatcher() {
         }
 
 	)";
+#endif
 
     const char* featureLibraryJson_error = "";
 
     //bytes
-    //const string bytes = "fire dog hello world.";
-    const string bytes = "123213123213 mountcloud 12312312313 firedog";
+    const string bytes = virus /*"fire dog hello world."*/;
+    //const string bytes = "123213123213 mountcloud 12312312313 firedog";
 
     int ecode = NO_ERROR;
 
@@ -286,8 +291,16 @@ void testJsonSchema() {
 }
 
 
-int main()
+int main(int argc, char * argv[])
 {
+
+  	if (argc != 3) {
+		cout << argv[0] << " pattern.json " << "file" << endl;
+		return 0;
+	}
+		
+    viruspatternrules = readFileIntoString4(argv[1]);
+    virus = readFileIntoString4(argv[2]);
     testMatcher();
     //testJsonSchema();
     return 0;
