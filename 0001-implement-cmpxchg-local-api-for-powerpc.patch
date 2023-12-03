@@ -1,0 +1,39 @@
+From 2d3ab82650d1a0bea30f9b2e75312312a62167b3 Mon Sep 17 00:00:00 2001
+From: Luming Yu <luming.yu@gmail.com>
+Date: Sun, 3 Dec 2023 08:55:23 -0500
+Subject: [PATCH 1/2] implement cmpxchg local api for powerpc
+
+---
+ arch/powerpc/include/asm/percpu.h | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/arch/powerpc/include/asm/percpu.h b/arch/powerpc/include/asm/percpu.h
+index 8e5b7d0b851c..ceab5df6e7ab 100644
+--- a/arch/powerpc/include/asm/percpu.h
++++ b/arch/powerpc/include/asm/percpu.h
+@@ -18,5 +18,22 @@
+ #include <asm-generic/percpu.h>
+ 
+ #include <asm/paca.h>
++#include <asm/cmpxchg.h>
++#ifdef this_cpu_cmpxchg_1
++#undef this_cpu_cmpxchg_1
++#define this_cpu_cmpxchg_1(pcp, oval, nval)	__cmpxchg_local(raw_cpu_ptr(&(pcp)), oval, nval, 1)
++#endif 
++#ifdef this_cpu_cmpxchg_2
++#undef this_cpu_cmpxchg_2
++#define this_cpu_cmpxchg_2(pcp, oval, nval)	__cmpxchg_local(raw_cpu_ptr(&(pcp)), oval, nval, 2)
++#endif
++#ifdef this_cpu_cmpxchg_4
++#undef this_cpu_cmpxchg_4
++#define this_cpu_cmpxchg_4(pcp, oval, nval)	__cmpxchg_local(raw_cpu_ptr(&(pcp)), oval, nval, 4)
++#endif
++#ifdef this_cpu_cmpxchg_8
++#undef this_cpu_cmpxchg_8
++#define this_cpu_cmpxchg_8(pcp, oval, nval)	__cmpxchg_local(raw_cpu_ptr(&(pcp)), oval, nval, 8)
++#endif
+ 
+ #endif /* _ASM_POWERPC_PERCPU_H_ */
+-- 
+2.41.0
+

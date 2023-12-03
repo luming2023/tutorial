@@ -1,0 +1,24 @@
+From a0914118557bd4af53e677ac8dcb6df2984be055 Mon Sep 17 00:00:00 2001
+From: Luming Yu <luming.yu@gmail.com>
+Date: Sun, 3 Dec 2023 08:56:46 -0500
+Subject: [PATCH 2/2] enable arch feature
+
+---
+ arch/powerpc/Kconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/powerpc/Kconfig b/arch/powerpc/Kconfig
+index 6f105ee4f3cf..c10229c0243c 100644
+--- a/arch/powerpc/Kconfig
++++ b/arch/powerpc/Kconfig
+@@ -226,6 +226,7 @@ config PPC
+ 	select HAVE_ARCH_SECCOMP_FILTER
+ 	select HAVE_ARCH_TRACEHOOK
+ 	select HAVE_ASM_MODVERSIONS
++	select HAVE_CMPXCHG_LOCAL
+ 	select HAVE_CONTEXT_TRACKING_USER
+ 	select HAVE_C_RECORDMCOUNT
+ 	select HAVE_DEBUG_KMEMLEAK
+-- 
+2.41.0
+
