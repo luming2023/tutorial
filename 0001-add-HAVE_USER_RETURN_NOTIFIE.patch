@@ -1,0 +1,90 @@
+From c3e9b2edac4f7b6a1870e73bd28db2f9a879bca7 Mon Sep 17 00:00:00 2001
+From: Luming Yu <luming.yu@gmail.com>
+Date: Sun, 10 Dec 2023 08:54:21 -0500
+Subject: [PATCH 1/1] add HAVE_USER_RETURN_NOTIFIE
+
+---
+ arch/powerpc/Kconfig                    |  1 +
+ arch/powerpc/include/asm/entry-common.h | 16 ++++++++++++++++
+ arch/powerpc/include/asm/thread_info.h  |  2 ++
+ arch/powerpc/kernel/process.c           |  2 ++
+ 4 files changed, 21 insertions(+)
+ create mode 100644 arch/powerpc/include/asm/entry-common.h
+
+diff --git a/arch/powerpc/Kconfig b/arch/powerpc/Kconfig
+index c10229c0243c..b968068cc04a 100644
+--- a/arch/powerpc/Kconfig
++++ b/arch/powerpc/Kconfig
+@@ -277,6 +277,7 @@ config PPC
+ 	select HAVE_STACKPROTECTOR		if PPC64 && $(cc-option,-mstack-protector-guard=tls -mstack-protector-guard-reg=r13)
+ 	select HAVE_STATIC_CALL			if PPC32
+ 	select HAVE_SYSCALL_TRACEPOINTS
++	select HAVE_USER_RETURN_NOTIFIER
+ 	select HAVE_VIRT_CPU_ACCOUNTING
+ 	select HAVE_VIRT_CPU_ACCOUNTING_GEN
+ 	select HOTPLUG_SMT			if HOTPLUG_CPU
+diff --git a/arch/powerpc/include/asm/entry-common.h b/arch/powerpc/include/asm/entry-common.h
+new file mode 100644
+index 000000000000..51f1eb767696
+--- /dev/null
++++ b/arch/powerpc/include/asm/entry-common.h
+@@ -0,0 +1,16 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef ARCH_POWERPC_ENTRY_COMMON_H
++#define ARCH_POWERPC_ENTRY_COMMON_H
++
++#include <linux/user-return-notifier.h>
++
++static inline void arch_exit_to_user_mode_prepare(struct pt_regs *regs,
++						  unsigned long ti_work)
++{
++	if (ti_work & _TIF_USER_RETURN_NOTIFY)
++		fire_user_return_notifiers();
++}
++
++#define arch_exit_to_user_mode_prepare arch_exit_to_user_mode_prepare
++
++#endif
+diff --git a/arch/powerpc/include/asm/thread_info.h b/arch/powerpc/include/asm/thread_info.h
+index bf5dde1a4114..47e226032f9c 100644
+--- a/arch/powerpc/include/asm/thread_info.h
++++ b/arch/powerpc/include/asm/thread_info.h
+@@ -117,6 +117,7 @@ void arch_setup_new_exec(void);
+ #endif
+ #define TIF_POLLING_NRFLAG	19	/* true if poll_idle() is polling TIF_NEED_RESCHED */
+ #define TIF_32BIT		20	/* 32 bit binary */
++#define TIF_USER_RETURN_NOTIFY	21	/* notify kernel of userspace return */
+ 
+ /* as above, but as bit values */
+ #define _TIF_SYSCALL_TRACE	(1<<TIF_SYSCALL_TRACE)
+@@ -125,6 +126,7 @@ void arch_setup_new_exec(void);
+ #define _TIF_NOTIFY_SIGNAL	(1<<TIF_NOTIFY_SIGNAL)
+ #define _TIF_POLLING_NRFLAG	(1<<TIF_POLLING_NRFLAG)
+ #define _TIF_32BIT		(1<<TIF_32BIT)
++#define _TIF_USER_RETURN_NOTIFY	(1<<TIF_USER_RETURN_NOTIFY)
+ #define _TIF_RESTORE_TM		(1<<TIF_RESTORE_TM)
+ #define _TIF_PATCH_PENDING	(1<<TIF_PATCH_PENDING)
+ #define _TIF_SYSCALL_AUDIT	(1<<TIF_SYSCALL_AUDIT)
+diff --git a/arch/powerpc/kernel/process.c b/arch/powerpc/kernel/process.c
+index 392404688cec..70a9ea949798 100644
+--- a/arch/powerpc/kernel/process.c
++++ b/arch/powerpc/kernel/process.c
+@@ -38,6 +38,7 @@
+ #include <linux/uaccess.h>
+ #include <linux/pkeys.h>
+ #include <linux/seq_buf.h>
++#include <linux/user-return-notifier.h>
+ 
+ #include <asm/interrupt.h>
+ #include <asm/io.h>
+@@ -1386,6 +1387,7 @@ struct task_struct *__switch_to(struct task_struct *prev,
+ 	if (current->thread.regs)
+ 		restore_math(current->thread.regs);
+ #endif /* CONFIG_PPC_BOOK3S_64 */
++	propagate_user_return_notify(prev, new);
+ 
+ 	return last;
+ }
+-- 
+2.41.0
+
