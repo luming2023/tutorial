@@ -1,0 +1,33 @@
+From d7f618e86e8e4fb4c925dbe831b04ac70b64b135 Mon Sep 17 00:00:00 2001
+From: Luming Yu <luming.yu@gmail.com>
+Date: Sun, 10 Dec 2023 08:54:21 -0500
+Subject: [PATCH 3/3] add HAVE_USER_RETURN_NOTIFIE
+
+---
+ arch/powerpc/kernel/interrupt.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/powerpc/kernel/interrupt.c b/arch/powerpc/kernel/interrupt.c
+index c4f6d3c69ba9..7fe704946e96 100644
+--- a/arch/powerpc/kernel/interrupt.c
++++ b/arch/powerpc/kernel/interrupt.c
+@@ -19,6 +19,7 @@
+ #include <asm/time.h>
+ #include <asm/tm.h>
+ #include <asm/unistd.h>
++#include <asm/entry-common.h>
+ 
+ #if defined(CONFIG_PPC_ADV_DEBUG_REGS) && defined(CONFIG_PPC32)
+ unsigned long global_dbcr0[NR_CPUS];
+@@ -245,6 +246,8 @@ interrupt_exit_user_prepare_main(unsigned long ret, struct pt_regs *regs)
+ 	/* Restore user access locks last */
+ 	kuap_user_restore(regs);
+ 
++	arch_exit_to_user_mode_prepare(regs, ti_flags);
++
+ 	return ret;
+ }
+ 
+-- 
+2.41.0
+

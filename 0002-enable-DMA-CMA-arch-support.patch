@@ -1,0 +1,45 @@
+From 4c4ad518a94558f440866edd1cce4bb20944e590 Mon Sep 17 00:00:00 2001
+From: Luming Yu <luming.yu@gmail.com>
+Date: Sun, 17 Dec 2023 04:22:47 -0500
+Subject: [PATCH 2/3] enable DMA CMA arch support
+
+---
+ arch/powerpc/Kconfig               | 1 +
+ arch/powerpc/kernel/setup-common.c | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/arch/powerpc/Kconfig b/arch/powerpc/Kconfig
+index b968068cc04a..e21f72bcb61f 100644
+--- a/arch/powerpc/Kconfig
++++ b/arch/powerpc/Kconfig
+@@ -231,6 +231,7 @@ config PPC
+ 	select HAVE_C_RECORDMCOUNT
+ 	select HAVE_DEBUG_KMEMLEAK
+ 	select HAVE_DEBUG_STACKOVERFLOW
++	select HAVE_DMA_CONTIGUOUS
+ 	select HAVE_DYNAMIC_FTRACE
+ 	select HAVE_DYNAMIC_FTRACE_WITH_ARGS	if ARCH_USING_PATCHABLE_FUNCTION_ENTRY || MPROFILE_KERNEL || PPC32
+ 	select HAVE_DYNAMIC_FTRACE_WITH_REGS	if ARCH_USING_PATCHABLE_FUNCTION_ENTRY || MPROFILE_KERNEL || PPC32
+diff --git a/arch/powerpc/kernel/setup-common.c b/arch/powerpc/kernel/setup-common.c
+index 9b142b9d5187..50d09363352d 100644
+--- a/arch/powerpc/kernel/setup-common.c
++++ b/arch/powerpc/kernel/setup-common.c
+@@ -35,6 +35,7 @@
+ #include <linux/of_irq.h>
+ #include <linux/hugetlb.h>
+ #include <linux/pgtable.h>
++#include <linux/dma-map-ops.h>
+ #include <asm/io.h>
+ #include <asm/paca.h>
+ #include <asm/processor.h>
+@@ -975,6 +976,7 @@ void __init setup_arch(char **cmdline_p)
+ 	 */
+ 	kvm_cma_reserve();
+ 	gigantic_hugetlb_cma_reserve();
++	dma_contiguous_reserve(0);
+ 
+ 	early_memtest(min_low_pfn << PAGE_SHIFT, max_low_pfn << PAGE_SHIFT);
+ 
+-- 
+2.41.0
+
