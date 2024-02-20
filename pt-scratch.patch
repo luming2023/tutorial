@@ -1,0 +1,370 @@
+diff --git a/Makefile b/Makefile
+index 7867efc..a762e44 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,5 @@
+-USER_CFLAGS := -g -Wall
++USER_CFLAGS := -g -Wall -pg  -fprofile-arcs -ftest-coverage
++LDFLAGS += -lgcov --coverage
+ ifneq ($(XED),)
+ USER_CFLAGS += -DHAVE_XED=1
+ DIS_LDLIBS += -lxed
+@@ -12,9 +13,9 @@ USER_EXE := sptdump fastdecode sptdecode ptfeature # dumpkcore
+ MAN := sptdump.man fastdecode.man sptdecode.man ptfeature.man sptcmd.man \
+ 	sptarchive.man
+ 
+-KDIR = /lib/modules/`uname -r`/build
++KERNEL_SRC ?= /lib/modules/`uname -r`/build
+ obj-m := simple-pt.o test-ftrace.o
+-M := make -C ${KDIR} M=`pwd`
++M := make -C ${KERNEL_SRC} M=$(shell pwd)
+ 
+ CFLAGS_simple-pt.o := -DTRACE_INCLUDE_PATH=${M}
+ CFLAGS_test-ftrace.o := -DTRACE_INCLUDE_PATH=${M}
+@@ -42,7 +43,6 @@ user: ${USER_EXE}
+ sptdump: sptdump.o
+ sptdump.o: sptdump.c simple-pt.h map.h
+ map.o: map.c map.h
+-
+ fastdecode: fastdecode.o map.o
+ 
+ sptdecode.o: CFLAGS += -I ${LIBIPT_INCLUDE}
+@@ -50,13 +50,13 @@ elf.o: CFLAGS += -I ${LIBIPT_INCLUDE}
+ dtools.o: CFLAGS += -I ${LIBIPT_INCLUDE}
+ kernel.o: CFLAGS += -I ${LIBIPT_INCLUDE}
+ dwarf.o: CFLAGS += -I /usr/include/libdwarf -I /usr/local/include/libdwarf
+-sptdecode: LDFLAGS += -L ${LIBIPT_LIB}
++sptdecode: LDFLAGS += -L ${LIBIPT_LIB} -L ../scratch-pad/
+ sptdecode: LDFLAGS += ${DIS_LDFLAGS}
+ sptdecode: LDLIBS += ${DIS_LDLIBS}
+-sptdecode: LDLIBS += -lipt -lelf -ldwarf
++sptdecode: LDLIBS += -lipt -lelf -llibdwarf -lmon
+ sptdecode: sptdecode.o map.o elf.o symtab.o dtools.o kernel.o dwarf.o
+ 
+-dumpkcore: LDLIBS += -lelf
++dumpkcore: LDLIBS += -lelf 
+ 
+ %.html: %.man
+ 	man -Thtml ./$^ > $@
+diff --git a/dtools.c b/dtools.c
+index 9b5ff0c..117d410 100644
+--- a/dtools.c
++++ b/dtools.c
+@@ -81,6 +81,8 @@ meta num_freq num
+ meta tsc_ratio eax ebx
+ timestamp pid cr3 load-address off-in-file path-to-binary[:codebin]
+  */
++
++uint64_t virt_base;
+ void load_sideband(char *fn, struct pt_image *image, struct pt_config *config)
+ {
+ 	FILE *f = fopen(fn, "r");
+@@ -97,6 +99,7 @@ void load_sideband(char *fn, struct pt_image *image, struct pt_config *config)
+ 		double ts;
+ 		int n;
+ 
++
+ 		if (!strncmp(line, "meta", 4)) {
+ 			if (sscanf(line, "meta tsc_ratio %u %u",
+ 					&config->cpuid_0x15_eax,
+@@ -132,8 +135,11 @@ void load_sideband(char *fn, struct pt_image *image, struct pt_config *config)
+ 				continue;
+ 			}
+ 		}
+-		if (ts == 0 && !seen_cr3(cr3))
++/*
++bug cr3 is valid before symtabs is valid
++		if (ts == 0 &&  !seen_cr3(cr3))
+ 			continue;
++*/
+ 		while (isspace(line[n]))
+ 			n++;
+ 		/* timestamp ignored for now. could later be used to distinguish
+@@ -145,6 +151,7 @@ void load_sideband(char *fn, struct pt_image *image, struct pt_config *config)
+ 			while (--p >= line + n && isspace(*p))
+ 				*p = 0;
+ 		}
++		virt_base = addr;
+ 		if (read_elf(line + n, image, addr, cr3, off, len)) {
+ 			fprintf(stderr, "Cannot read %s: %s\n", line + n, strerror(errno));
+ 		}
+diff --git a/elf.c b/elf.c
+index cae2438..166a9c9 100644
+--- a/elf.c
++++ b/elf.c
+@@ -65,6 +65,7 @@ void read_symtab(Elf *elf, uint64_t cr3, uint64_t base, uint64_t offset, char *f
+ 					st->end = s->val + s->size;
+ 			}
+ 			sort_symtab(st);
++			//dump_symtab(st);
+ 		}
+ 	}
+ }
+@@ -101,8 +102,8 @@ void add_progbits(Elf *elf, struct pt_image *image, char *fn, uint64_t base,
+ 		GElf_Phdr phdr;
+ 		gelf_getphdr(elf, i, &phdr);
+ 
+-		if ((phdr.p_type == PT_LOAD) && (phdr.p_flags & PF_X) &&
+-			phdr.p_offset >= file_off &&
++		if ((phdr.p_type == PT_LOAD)  && (phdr.p_flags & PF_X) &&
++			phdr.p_offset <= file_off &&
+ 			(!map_len || phdr.p_offset + phdr.p_filesz <= file_off + map_len)) {
+ 			struct pt_asid asid;
+ 			int err;
+@@ -111,9 +112,11 @@ void add_progbits(Elf *elf, struct pt_image *image, char *fn, uint64_t base,
+ 			asid.cr3 = cr3;
+ 			errno = 0;
+ 
++			//printf ("add file:%s, phdr.p_offset:%.8x, phdr.p_filesz:%.8x, end:%.8x",
++			//		fn, phdr.p_offset, phdr.p_filesz, phdr.p_vaddr + offset);
+ 			err = pt_image_add_file(image, fn, phdr.p_offset,
+ 						phdr.p_filesz,
+-					       &asid, phdr.p_vaddr + offset);
++					       0 /*&asid*/, /*phdr.p_vaddr + */offset);
+ 			/* Duplicate. Just ignore. */
+ 			if (err == -pte_bad_image)
+ 				continue;
+diff --git a/fastdecode.c b/fastdecode.c
+index be1d89b..a3f69f7 100644
+--- a/fastdecode.c
++++ b/fastdecode.c
+@@ -155,6 +155,7 @@ void decode_buffer(unsigned char *map, size_t len)
+ 
+ 	for (p = map; p < end; ) {
+ 		unsigned char *prev = p;
++#if 0
+ 		/* look for PSB */
+ 		p = memmem(p, end - p, psb, 16);
+ 		if (!p) {
+@@ -162,6 +163,7 @@ void decode_buffer(unsigned char *map, size_t len)
+ 			break;
+ 		}
+ 		skipped += p - prev;
++#endif 
+ 		while (p < end) {
+ 			printf("%lx\t", p - map);
+ 
+diff --git a/loop.c b/loop.c
+index 820379e..a521ae7 100644
+--- a/loop.c
++++ b/loop.c
+@@ -1,14 +1,24 @@
+ 
+ volatile int v;
++void bar()
++{
++}
++void foo()
++{
++bar();
++}
+ 
+ int main(void)
+ {
+ 	int i;
+ 
+-	prctl(12341234); /* marker 1 */
+-	for (i = 0; i < 100; i++)
++//	prctl(12341234); /* marker 1 */
++	for (i = 0; i < 100000; i++) {
++//	for (;;) {
+ 		v++;
+-	write(1, "foo\n", 4);
+-	personality(21212212); /* marker 2 */
++		foo();
++	}
++//	write(1, "foo\n", 4);
++//	personality(21212212); /* marker 2 */
+ 	return 0;
+ }
+diff --git a/simple-pt.c b/simple-pt.c
+index 7d98a69..b01eabd 100644
+--- a/simple-pt.c
++++ b/simple-pt.c
+@@ -312,7 +312,7 @@ static unsigned addr_cfg_max;
+ static bool disable_branch;
+ module_param(disable_branch, bool, 0644);
+ MODULE_PARM_DESC(disable_branch, "Don't enable branch tracing (if supported)");
+-static int pt_buffer_order = 9;
++static int pt_buffer_order = 10;
+ module_param(pt_buffer_order, int, 0444);
+ MODULE_PARM_DESC(pt_buffer_order, "Order of PT buffer size per CPU (2^n pages)");
+ module_param(pt_num_buffers, int, 0444);
+@@ -490,6 +490,10 @@ static int start_pt(void)
+ 		 CYC_EN | TRACE_EN | BRANCH_EN | CYC_EN | MTC_EN |
+ 		 MTC_EN | MTC_MASK | CYC_MASK | PSB_MASK | ADDR0_MASK | ADDR1_MASK);
+ 	/* Otherwise wait for start trigger */
++	if (kernel)
++		val |= CTL_OS;
++	else	
++		val ^= CTL_OS;
+ 	if (!delay_start)
+ 		val |= TRACE_EN;
+ 	if (!disable_branch)
+@@ -498,8 +502,6 @@ static int start_pt(void)
+ 		val |= TO_PA;
+ 	if (tsc_en)
+ 		val |= TSC_EN;
+-	if (kernel)
+-		val |= CTL_OS;
+ 	if (user)
+ 		val |= CTL_USER;
+ 	if (cr3_filter && has_cr3_match) {
+@@ -548,8 +550,12 @@ static int start_pt(void)
+ 		pt_wrmsrl_safe(MSR_IA32_ADDR1_END, addr1_end);
+ 	}
+ 
++//	pr_err("before write: cpu %d, RTIT_CTL: %.8x  \n", smp_processor_id(), val);
++	val = 0x00002509;
+ 	if (pt_wrmsrl_safe(MSR_IA32_RTIT_CTL, val) < 0)
+ 		return -1;
++	pt_rdmsrl_safe(MSR_IA32_RTIT_CTL, &val);
++//	pr_err("after write: cpu %d, RTIT_CTL: %.8x  \n", smp_processor_id(), val);
+ 	__this_cpu_write(pt_running, true);
+ 	return 0;
+ }
+@@ -778,6 +784,7 @@ static int simple_pt_mmap(struct file *file, struct vm_area_struct *vma)
+ 	u64 *topa;
+ 	unsigned long buffer_size = PAGE_SIZE << pt_buffer_order;
+ 
++	//vm_flags_set(vma, vma->vm_flags & (~VM_MAYWRITE));
+ 	vma->vm_flags &= ~VM_MAYWRITE;
+ 
+ 	if (len % PAGE_SIZE || len != num * buffer_size || vma->vm_pgoff)
+@@ -903,6 +910,7 @@ static int probe_exec(struct kprobe *kp, struct pt_regs *regs)
+ 
+ 	/* mmap_sem needed? */
+ 	path = d_path(&current->mm->exe_file->f_path, pathbuf, PAGE_SIZE);
++	printk("probe_exec: %s \n", path);
+ 	if (IS_ERR(path))
+ 		goto out;
+ 
+diff --git a/sptcmd b/sptcmd
+index 7cb4bcb..44984a8 100755
+--- a/sptcmd
++++ b/sptcmd
+@@ -275,20 +275,21 @@ if [ -z "$DUMP_ONLY" ] ; then
+ 	echo $START > $C/trace_start
+ 	echo $STOP > $C/trace_stop
+ 	echo > $T/trace
+-	echo $ENUMALL > $C/enumerate_all
+-	if [ "$ENUMALL" != 0 ] ; then
++	echo 1  > $C/enumerate_all
++#	ENUMALL = 1
++#	if [ "$ENUMALL" != 0 ] ; then
+ 		grep . /proc/[0-9]*/maps > ${PREFIX}.maps
+ 		echo >&2 "Wrote initial process maps to ${PREFIX}.maps"
+-	else
+-		echo -n > ${PREFIX}.maps
+-	fi
++#	else
++#		echo -n > ${PREFIX}.maps
++#	fi
+ 	ptfeature > ${PREFIX}.cpuid
+ 	echo 1 > $C/start
+ 	if [ "$ENABLE_ONLY" != "" ] ; then
+ 		echo "PT running"
+ 		exit 0
+ 	fi
+-	"$@"
++	 taskset -c 0 "$@"
+ fi
+ if [ "$PRINT_REGS" != 0 ] ; then
+ 	ptregs
+diff --git a/sptdecode.c b/sptdecode.c
+index 54225e1..f86e650 100644
+--- a/sptdecode.c
++++ b/sptdecode.c
+@@ -55,12 +55,15 @@
+ #include <xed/xed-decoded-inst-api.h>
+ #endif
+ 
++#include "mon.h"
++
+ #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
+ #define container_of(ptr, type, member) \
+ 	((type *)((char *)(ptr) - offsetof(type, member)))
+ 
+ bool abstime;
+-
++bool symbol = true;
++extern uint64_t virt_base;
+ /* Includes branches and anything with a time. Always
+  * flushed on any resyncs.
+  */
+@@ -112,13 +115,23 @@ static void print_tsx(struct sinsn *insn, int *prev_spec, int *indent)
+ // XXX print dwarf
+ static void print_ip(uint64_t ip, uint64_t cr3)
+ {
+-	struct sym *sym = findsym(ip, cr3);
+-	if (sym) {
+-		printf("%s", sym->name);
++	struct sym *sym = findsym(ip+0x1000, cr3);
++	if (sym && symbol) {
++		static long i = 0;
++		static uint64_t from = 0, to = 0;
++		printf("%s(%lx,%lx)", sym->name,sym->val,virt_base);
+ 		if (ip - sym->val > 0)
+ 			printf("+%ld", ip - sym->val);
+-	} else
+-		printf("%lx", ip);
++		dprintf(2, "%lx ", sym->val);
++		from = to;
++		to = sym->val-virt_base;	
++		i++;
++		if (i%2 == 0) {
++			//_mcount_priv(from, to);
++			ptmcount(from, to);
++			dprintf(2, "\n");	
++		}
++	}
+ }
+ 
+ static double tsc_us(int64_t t)
+@@ -694,8 +707,9 @@ int main(int ac, char **av)
+ 	bool use_tsc_time = false;
+ 	char *kernel_fn = NULL;
+ 
++	startup();
+ 	pt_config_init(&config);
+-	while ((c = getopt_long(ac, av, "e:p:is:ltdk:a", opts, NULL)) != -1) {
++	while ((c = getopt_long(ac, av, "e:p:is:ltdk:a:m", opts, NULL)) != -1) {
+ 		switch (c) {
+ 		case 'e':
+ 			if (read_elf(optarg, image, 0, 0, 0, 0) < 0) {
+@@ -737,6 +751,9 @@ int main(int ac, char **av)
+ 		case 'a':
+ 			abstime = true;
+ 			break;
++		case 'm':
++			symbol = false;
++			break;
+ 		default:
+ 			usage();
+ 		}
+@@ -756,5 +773,6 @@ int main(int ac, char **av)
+ 	decode(decoder);
+ 	pt_image_free(image);
+ 	pt_insn_free_decoder(decoder);
++	cleanup();
+ 	return 0;
+ }
+diff --git a/tester b/tester
+index da3dd76..0b7b0d9 100755
+--- a/tester
++++ b/tester
+@@ -24,12 +24,12 @@ PREFIX=stest
+ 
+ EXTRA="-t $1 $2 $3"
+ 
+-STDCMD=loop
++STDCMD=/home/lyu2/simple-pt/loop
+ CMD=$STDCMD
+ 
+ run() {
+ 	sptcmd $EXTRA -o $PREFIX "$@" taskset -c 0 $CMD
+-	$V sptdecode --sideband ${PREFIX}.sideband --pt ${PREFIX}.0 $DARGS > ${PREFIX}.out
++	$V sptdecode --sideband ${PREFIX}.sideband -e $CMD --pt ${PREFIX}.0 $DARGS > ${PREFIX}.out
+ }
+ 
+ gcc -o loop loop.c -g
