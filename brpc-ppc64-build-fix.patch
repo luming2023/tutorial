@@ -1,0 +1,43 @@
+diff --git a/src/butil/atomicops.h b/src/butil/atomicops.h
+index cda1529..77b8f94 100644
+--- a/src/butil/atomicops.h
++++ b/src/butil/atomicops.h
+@@ -153,6 +153,8 @@ Atomic64 Release_Load(volatile const Atomic64* ptr);
+ #include "butil/atomicops_internals_arm64_gcc.h"
+ #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY)
+ #include "butil/atomicops_internals_x86_gcc.h"
++#elif defined(COMPILER_GCC) && defined(ARCH_CPU_PPC_FAMILY)
++#include "butil/atomicops_internals_gcc.h"
+ #elif defined(COMPILER_GCC) && defined(ARCH_CPU_MIPS_FAMILY)
+ #include "butil/atomicops_internals_mips_gcc.h"
+ #elif defined(COMPILER_GCC) && defined(ARCH_CPU_LOONGARCH64_FAMILY)
+diff --git a/src/butil/build_config.h b/src/butil/build_config.h
+index 5ddf382..2637395 100644
+--- a/src/butil/build_config.h
++++ b/src/butil/build_config.h
+@@ -118,6 +118,10 @@
+ #define ARCH_CPU_ARM64 1
+ #define ARCH_CPU_64_BITS 1
+ #define ARCH_CPU_LITTLE_ENDIAN 1
++#elif defined(_ARCH_PPC64)
++#define ARCH_CPU_PPC_FAMILY 1
++#define ARCH_CPU_64_BITS 1
++#define ARCH_CPU_LITTLE_ENDIAN 1
+ #elif defined(__pnacl__)
+ #define ARCH_CPU_32_BITS 1
+ #define ARCH_CPU_LITTLE_ENDIAN 1
+diff --git a/src/butil/time.h b/src/butil/time.h
+index 005f551..e3c878e 100644
+--- a/src/butil/time.h
++++ b/src/butil/time.h
+@@ -224,6 +224,10 @@ inline uint64_t clock_cycles() {
+         : "=a" (lo), "=d" (hi)
+         );
+     return ((uint64_t)hi << 32) | lo;
++#elif defined(_ARCH_PPC64)
++    unsigned long long __tb;
++    __asm__ volatile ("mfspr %0, 268" : "=r" (__tb));
++    return __tb;
+ #elif defined(__aarch64__)
+     uint64_t virtual_timer_value;
+     asm volatile("mrs %0, cntvct_el0" : "=r"(virtual_timer_value));
