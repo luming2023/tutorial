@@ -1,0 +1,1 @@
+BOOT_IMAGE=(ieee1275//vdevice/v-scsi@71000003/disk@8000000000000000,gpt2)/vmlinuz-6.7.0-rc1 root=UUID=d0396666-3f06-4367-9077-b1c6aa5632c2 ro rootflags=subvol=root no_timer_check net.ifnames=0 console=ttyS0,115200n8
