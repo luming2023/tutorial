@@ -3,20 +3,43 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
+import time
+from datetime import date
 
 ##准备数据
 
 #日k线改月k线
-logic={'open':'first','high':'max','low':'min',
-       'close':'last','volume':'sum','ret':'sum'}
+##resample so that Open is the first monday price, High and low are the month min and max and
+#close is the last sunday price and volume is the sum (can be customized - pandas docs)
+
+logic={'open':'first',
+       'high':'max',
+       'low':'min',
+       'close':'last',
+       'volume':'sum',
+       'ret':'sum'}
+
+#start_day="20240629" end_day="20250629"
+
+today = date.today()
+da=today.replace(year=today.year -1)
+start_day=da.strftime("%Y%m%d")
+print(start_day)
+end_day=today.strftime("%Y%m%d")
+print(end_day)
+
 #使用akshare获取创业版指数
-sz399006 = ak.stock_zh_index_daily_em(symbol="sz399006")
+sz399006 = ak.stock_zh_index_daily_em(symbol="sz399006",start_date=start_day,end_date=end_day)
 sz399006['ret']=sz399006['close'].pct_change()
 sz399006['date']=pd.to_datetime(sz399006['date'])
 sz399006 = sz399006.set_index('date')
+#to csv
+sz399006.to_csv("sz399006.csv")
+
 
 #日K线改为月K线
 m_399006 = sz399006.resample('ME').apply(logic)
+m_399006.to_csv("m_sz399006.csv")
 
 #使用akshare 获取沪深300价格
 sh000300 = ak.stock_zh_index_daily_em(symbol="sh000300")
