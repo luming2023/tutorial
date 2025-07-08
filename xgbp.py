@@ -35,12 +35,12 @@ if st.button("start prediction"):
         df_raw = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date.strftime('%Y%m%d'),
                                     end_date=end_date.strftime('%Y%m%d'), adjust="qfq")
         df = df_raw.rename(columns={
-                "开盘", "open",
-                "收盘", "close"
-                "最高", "high"
-                "最低", "low"
-                "成交量", "volume",
-                "日期", "date"
+                "开盘": "open",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "成交量": "volume",
+                "日期":"date"
                 })
         df['date'] = pd.to_datetime(df['date'])
         df.set_index("date", inplace=True)
@@ -89,7 +89,7 @@ if st.button("start prediction"):
 
         wrong_df = df [~df['correct'] & (df['pred'] == 1)]
         fig.add_trace(go.Scatter(
-            x=wrong_df.indec,
+            x=wrong_df.index,
             y=wrong_df['close'],
             mode='markers',
             marker=dict(symbol='triangle-down', color='red', size=10),
